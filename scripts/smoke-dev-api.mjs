@@ -1,0 +1,21 @@
+// Exercises the fake API the same way the UI does. Usage: node scripts/smoke-dev-api.mjs [baseUrl]
+const B = process.argv[2] || "http://127.0.0.1:4000/api"; let fail = 0; const ok = (c, m) => { console.log((c ? "PASS " : "FAIL ") + m); if (!c) fail++; };
+const call = async (p, o = {}, t) => { const r = await fetch(B + p, { ...o, headers: { "Content-Type": "application/json", ...(t ? { Authorization: "Bearer " + t } : {}) } }); return [r.status, await r.json().catch(() => null)]; };
+const login = async (e) => (await call("/auth/login", { method: "POST", body: JSON.stringify({ email: e, password: "demo1234" }) }))[1].token;
+const P = await login("patient@example.com"), H = await login("hospital@example.com"); let s, d;
+[s] = await call("/auth/login", { method: "POST", body: JSON.stringify({ email: "x@y.z", password: "no" }) }); ok(s === 401, "bad login gives 401");
+[s] = await call("/ambulance/bookings"); ok(s === 401, "no token gives 401");
+[s] = await call("/hospital/overview", {}, P); ok(s === 403, "patient cannot open hospital API (403)");
+[s, d] = await call("/ambulance/bookings", { method: "POST", body: JSON.stringify({ emergencyType: "cardiac" }) }, P); ok(s === 422 && d.errors.contactPhone, "booking validation returns field errors");
+[s, d] = await call("/ambulance/bookings", { method: "POST", body: JSON.stringify({ emergencyType: "cardiac", severity: "critical", patientName: "Test", contactPhone: "9876543210", pickup: { address: "MG Road", lat: 12.97, lng: 77.6 } }) }, P); ok(s === 201 && d.id, "create booking"); const id = d.id;
+[s, d] = await call("/ambulance/bookings/" + id, {}, P); ok(s === 200 && d.status === "requested", "tracking returns persisted status");
+[s, d] = await call("/ambulance/bookings", {}, P); ok(d.some((b) => b.id === id), "booking appears in list");
+[s, d] = await call("/ambulance/bookings/" + id + "/cancel", { method: "POST" }, P); ok(s === 200 && d.status === "cancelled", "cancel booking");
+[s, d] = await call("/homecare/visits", { method: "POST", body: JSON.stringify({ type: "nurse", reason: "Dressing", date: "2030-01-01", timeSlot: "10:00-12:00", address: "12 Park Street", phone: "9876543210" }) }, P); ok(s === 201, "home nurse visit");
+[s, d] = await call("/homecare/sample-collections", { method: "POST", body: JSON.stringify({ tests: ["t1"], date: "2030-01-01", timeSlot: "10:00-12:00", address: "12 Park Street", phone: "9876543210" }) }, P); ok(s === 201, "home sample collection");
+[s, d] = await call("/homecare/bookings", {}, P); ok(d.length === 2, "home-care list shows both");
+[s, d] = await call("/hospital/overview", {}, H); ok(s === 200 && "bedsAvailable" in d, "hospital overview");
+[s] = await call("/hospital/capacity", { method: "PUT", body: JSON.stringify({ generalBeds: -1, icuBeds: 2 }) }, H); ok(s === 422, "capacity validation");
+[s] = await call("/hospital/pre-admissions/p1", { method: "PATCH", body: JSON.stringify({ status: "accepted" }) }, H); ok(s === 200, "accept pre-admission");
+[s] = await call("/hospital/transfer-requests", { method: "POST", body: JSON.stringify({ patientName: "A B", priority: "critical", reason: "Cardiac", destination: "Apollo" }) }, H); ok(s === 201, "transfer request");
+process.exit(fail ? 1 : 0);

@@ -1,0 +1,10 @@
+{
+  "description": "This app offers a seamless platform for booking ambulances, home nursing, and lab tests, while managing personal health records for users and families.",
+  "robots": {
+    "index": false
+  },
+  "accessibility": {
+    "addBypassLinks": false,
+    "ignoreReducedMotion": false
+  }
+}
